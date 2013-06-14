@@ -1,5 +1,7 @@
 #include <sys/epoll.h>
 
+#include <stdio.h>
+
 int epoll_fb_init(int fd) {
 	int ep = epoll_create(1);
 	int e = epoll_ctl(ep, EPOLL_CTL_ADD, fd, EPOLLIN);
