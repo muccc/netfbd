@@ -29,3 +29,10 @@ int epoll_fb_wait(int epfd) {
 
 	return ret;
 }
+
+
+/* int epfd = epoll_fb_init(fb); */
+/* int ev_count = 0; */
+/* while ((ev_count = epoll_fb_wait(epfd)) != 0) { */
+/* 	read(fb); etc */
+/* } */
