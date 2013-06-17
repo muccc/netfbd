@@ -13,6 +13,12 @@
 
 #include <linux/fb.h>
 
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <netdb.h>
+#include <arpa/inet.h>
+
 struct fb_info {
     int fd;
     size_t length;
@@ -62,7 +68,7 @@ void fb_map_into_module(struct fb_info *info, struct flipdot_module *module, uin
 		
 		/* Write byte into module after first byte is full*/
 		if (module_bit > 7 && module_bit % 8 == 0) {
-						module_byte >>= 1;	/* Shift except last step */
+			module_byte >>= 1;	/* Shift except last step */
 			*(module->memory + fb_byte_idx) = module_byte;
 			fb_byte_idx++;
 		}
@@ -97,8 +103,8 @@ int fb_reinit(struct fb_info *info) {
         info->memory = mremap(info->memory, old_length, info->length, MREMAP_MAYMOVE);
 
     if (info->memory == MAP_FAILED) {
-       perror("mmap failed");
-       return 1;
+		perror("mmap failed");
+		return 1;
     }
 
     return 0;
@@ -132,6 +138,67 @@ int fb_set_mode(struct fb_info *info, size_t x, size_t y) {
     return fb_reinit(info);
 }
 
+int udp6_make_sock(struct addrinfo **psinfo, char host[], int port) {
+	int status, sock;
+	struct addrinfo sainfo;
+	struct sockaddr_in6 sin6;
+	int sin6len;
+	const int port_len_max = 16;
+	char port_str[port_len_max];
+
+	snprintf(port_str, port_len_max, "%d", port);
+
+	sin6len = sizeof(struct sockaddr_in6);
+
+	sock = socket(PF_INET6, SOCK_DGRAM,0);
+
+	memset(&sin6, 0, sizeof(struct sockaddr_in6));
+	sin6.sin6_port = htons(0);
+	sin6.sin6_family = AF_INET6;
+	sin6.sin6_addr = in6addr_any;
+
+	status = bind(sock, (struct sockaddr *)&sin6, sin6len);
+
+	if(-1 == status)
+		perror("bind"), exit(1);
+
+	memset(&sainfo, 0, sizeof(struct addrinfo));
+	memset(&sin6, 0, sin6len);
+
+	sainfo.ai_flags = 0;
+	sainfo.ai_family = PF_INET6;
+	sainfo.ai_socktype = SOCK_DGRAM;
+	sainfo.ai_protocol = IPPROTO_UDP;
+	status = getaddrinfo(host, port_str, &sainfo, psinfo);
+
+	switch (status) {
+		case EAI_FAMILY: printf("family\n");
+			break;
+		case EAI_SOCKTYPE: printf("stype\n");
+			break;
+		case EAI_BADFLAGS: printf("flag\n");
+			break;
+		case EAI_NONAME: printf("noname\n");
+			break;
+		case EAI_SERVICE: printf("service\n");
+			break;
+	}
+   
+	return sock;
+}
+
+int udp6_sendto(uint8_t *buffer, size_t len, int sock, struct addrinfo **psinfo) {
+	int status = sendto(sock, buffer, len, 0,
+						(struct sockaddr *)(*psinfo)->ai_addr,
+						sizeof(struct sockaddr_in6));
+	return status;
+}
+
+void udp6_close(int sock, struct addrinfo **psinfo) {
+	freeaddrinfo(*psinfo);
+	shutdown(sock, 2);
+	close(sock);
+}
 
 /* Pipe into imagemagick display! It outputs xbm. */
 int main(int argc, char *argv[]) {
@@ -148,29 +215,45 @@ int main(int argc, char *argv[]) {
 
     fb_set_mode(&info, fb_width, fb_height);
 
-	int module_width = 20*4;
-	int module_height = 16*4;
+	int module_width = 40;
+	int module_height = 16;
 	int module_pixels = module_width*module_height;
 	int module_bytes = module_pixels/8;
 	uint8_t module_memory[module_bytes];
-	memset(&module_memory, 0, module_bytes);
 
-	struct flipdot_module module;
-	module.memory = (uint8_t *)module_memory;
-	module.x = 0;
-	module.y = 0;
-	module.w = module_width;
-	module.h = module_height;
+	int sock;
+	struct addrinfo psinfo;
+	struct addrinfo *foo = &psinfo;
+	struct addrinfo **psinfo_p = &foo;
+	sock = udp6_make_sock(psinfo_p, "fe80::222:f9ff:fe01:c65%wlan0", 2323);
+
+	printf("%d\n", sock);
 	
-	fb_map_into_module(&info, &module, 80);
+	for (;;) {
+		memset(&module_memory, 0, module_bytes);
 
-	printf("#define fb_width %d\n"
-		   "#define fb_height %d\n"
-		   "static char_fb_bits[] = {\n", module_width, module_height);
-	for (int module_byte = 0; module_byte < module_bytes; ++module_byte) {
-		printf("0x%02x,", *(module_memory + module_byte));
+		struct flipdot_module module;
+		module.memory = (uint8_t *)module_memory;
+		module.x = 0;
+		module.y = 0;
+		module.w = module_width;
+		module.h = module_height;
+	
+		fb_map_into_module(&info, &module, 80);
+
+		printf("#define fb_width %d\n"
+			   "#define fb_height %d\n"
+			   "static char_fb_bits[] = {\n", module_width, module_height);
+		for (int module_byte = 0; module_byte < module_bytes; ++module_byte) {
+			printf("0x%02x,", *(module_memory + module_byte));
+		}
+		printf("}\n");
+		fprintf(stderr, ".");
+
+		udp6_sendto(module_memory, module_bytes, sock, psinfo_p);
+		usleep(500000);
 	}
-	printf("}\n");
+	udp6_close(sock, psinfo_p);
 
     fb_close(&info);
 

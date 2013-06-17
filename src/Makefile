@@ -1,2 +1,4 @@
 all:
-	gcc --std=gnu11 -g -Wall -o fb fb.c
+	gcc --std=gnu11 -g -Wall -o netfbd netfbd.c
+clean:
+	rm netfbd
