@@ -58,23 +58,21 @@ void fb_map_into_module(struct fb_info *info, struct flipdot_module *module, uin
 
 		uint8_t pixel_value = rgb_to_y(r, g, b);
 		
-		uint8_t bit = 0;
+		/* Should be inverted in the driver */
+		uint8_t bit = 1;
 		if (pixel_value > threshold) {
-			bit = 1;
+			bit = 0;
 		}
 
 		module_byte |= bit;
-		module_byte <<= 1;	/* TODO: bork */
 		
-		/* Write byte into module after first byte is full*/
-		if (module_bit > 7 && module_bit % 8 == 0) {
-			module_byte >>= 1;	/* Shift except last step */
+		++module_bit;
+		if (module_bit % 8 == 0) {
 			*(module->memory + fb_byte_idx) = module_byte;
+			module_byte = 0x00;
 			fb_byte_idx++;
 		}
-		/* TODO: don't forget the last byte! */
-		
-		module_bit++;
+		module_byte <<= 1;
 	}
 }
 
@@ -227,8 +225,6 @@ int main(int argc, char *argv[]) {
 	struct addrinfo **psinfo_p = &foo;
 	sock = udp6_make_sock(psinfo_p, "fe80::222:f9ff:fe01:c65%wlan0", 2323);
 
-	printf("%d\n", sock);
-	
 	for (;;) {
 		memset(&module_memory, 0, module_bytes);
 
@@ -239,19 +235,20 @@ int main(int argc, char *argv[]) {
 		module.w = module_width;
 		module.h = module_height;
 	
-		fb_map_into_module(&info, &module, 80);
+		fb_map_into_module(&info, &module, atoi(argv[1]));
 
-		printf("#define fb_width %d\n"
-			   "#define fb_height %d\n"
-			   "static char_fb_bits[] = {\n", module_width, module_height);
-		for (int module_byte = 0; module_byte < module_bytes; ++module_byte) {
-			printf("0x%02x,", *(module_memory + module_byte));
-		}
-		printf("}\n");
-		fprintf(stderr, ".");
+		/* printf("#define fb_width %d\n" */
+		/* 	   "#define fb_height %d\n" */
+		/* 	   "static char_fb_bits[] = {\n", module_width, module_height); */
+		/* for (int module_byte = 0; module_byte < module_bytes; ++module_byte) { */
+		/* 	printf("0x%02x,", *(module_memory + module_byte)); */
+		/* } */
+		/* printf("}\n"); */
+		/* fprintf(stderr, "."); */
 
 		udp6_sendto(module_memory, module_bytes, sock, psinfo_p);
-		usleep(500000);
+		int us = 1000000.0 * 1.0/atoi(argv[2]);
+		usleep(us);
 	}
 	udp6_close(sock, psinfo_p);
 
