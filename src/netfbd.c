@@ -228,7 +228,11 @@ int main(int argc, char *argv[]) {
 	struct addrinfo psinfo;
 	struct addrinfo *foo = &psinfo;
 	struct addrinfo **psinfo_p = &foo;
-	sock = udp6_make_sock(psinfo_p, "fe80::222:f9ff:fe01:c65%wlan0", 2323);
+	char *default_ip6_addr = "2001:7f0:3003:cafe:222:f9ff:fe01:c65";
+	if (argc == 4) {
+		default_ip6_addr = argv[3];
+	}
+	sock = udp6_make_sock(psinfo_p, default_ip6_addr, 2323);
 
 	for (;;) {
 		memset(&module_memory, 0, module_bytes);
