@@ -63,10 +63,9 @@ void fb_map_into_module(struct fb_info *info,
 
 		uint8_t pixel_value = rgb_to_y(r, g, b);
 		
-		/* Should be inverted in the driver */
-		uint8_t bit = 1;
+		uint8_t bit = 0;
 		if (pixel_value > threshold) {
-			bit = 0;
+			bit = 1;
 		}
 
 		module_byte |= bit;
@@ -126,11 +125,9 @@ int fb_init(struct fb_info *info, char *path) {
     return fb_reinit(info);
 }
 
-
 int fb_close(struct fb_info *info) {
     return close(info->fd);
 }
-
 
 int fb_set_mode(struct fb_info *info, size_t x, size_t y) {
     info->var_info.xres = x;
