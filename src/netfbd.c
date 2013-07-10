@@ -36,11 +36,16 @@ struct flipdot_module {
 };
 
 uint8_t rgb_to_y(uint8_t r, uint8_t g, uint8_t b) {
+	/* Some magic values from a YCbCr standard */
 	uint16_t y = 66*r + 129*g + 25*r;
 	return (y+128) >> 8; 			/* Divide by 255 and round */
 }
 
-void fb_map_into_module(struct fb_info *info, struct flipdot_module *module, uint8_t threshold) {
+/* Write the fb content into a flipdot_module. The Y-Channel of the
+ * RGB image is extracted and thresholded to get the bitmap. */
+void fb_map_into_module(struct fb_info *info,
+						struct flipdot_module *module,
+						uint8_t threshold) {
 	int module_bits = module->w * module->h;
 	int module_bit = 0;
 	uint8_t module_byte = 0;
@@ -79,14 +84,17 @@ void fb_map_into_module(struct fb_info *info, struct flipdot_module *module, uin
 int fb_reinit(struct fb_info *info) {
     size_t old_length = info->length;
 
+	/* Get fix_info of the fb */
     if (ioctl(info->fd, FBIOGET_FSCREENINFO, &info->fix_info)) {
         perror("fix_info");
         return 1;
     }
 
+	/* Do we have the correct format? */
     if (info->fix_info.type != FB_TYPE_PACKED_PIXELS)
         exit(42);
 
+	/* Get var_info of the fb */
     if (ioctl(info->fd, FBIOGET_VSCREENINFO, &info->var_info)) {
         perror("var_info");
         return 1;
@@ -236,15 +244,6 @@ int main(int argc, char *argv[]) {
 		module.h = module_height;
 	
 		fb_map_into_module(&info, &module, atoi(argv[1]));
-
-		/* printf("#define fb_width %d\n" */
-		/* 	   "#define fb_height %d\n" */
-		/* 	   "static char_fb_bits[] = {\n", module_width, module_height); */
-		/* for (int module_byte = 0; module_byte < module_bytes; ++module_byte) { */
-		/* 	printf("0x%02x,", *(module_memory + module_byte)); */
-		/* } */
-		/* printf("}\n"); */
-		/* fprintf(stderr, "."); */
 
 		udp6_sendto(module_memory, module_bytes, sock, psinfo_p);
 		int us = 1000000.0 * 1.0/atoi(argv[2]);
